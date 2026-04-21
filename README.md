@@ -24,17 +24,22 @@ AI Study Planner is a full-stack study task management web app built with Next.j
 - Tailwind CSS
 - Supabase
 - Vercel
-
 ## Screenshots
 
 ### Home Page
-![Home Page](./screenshots/home-page.png)
+![Home Page](./screenshots/home.png)
 
 ### Login Page
-![Login Page](./screenshots/login-page.png)
+![Login Page](./screenshots/login.png)
+
+### Reset Password Page
+![Reset Password Page](./screenshots/reset-password.png)
 
 ### Dashboard
-![Dashboard](./screenshots/dashboard-page.png)
+![Dashboard](./screenshots/dashboard.png)
+
+### Study Plan
+![Study Plan](./screenshots/study-plan.png)
 
 ## How to Run Locally
 
