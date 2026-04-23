@@ -10,6 +10,7 @@ type Task = {
   title: string;
   subject: string;
   deadline: string;
+  time?: string;
   completed: boolean;
   created_at?: string;
 };
@@ -33,6 +34,7 @@ export default function DashboardPage() {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [time, setTime] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<FilterType>("all");
 
@@ -40,6 +42,7 @@ export default function DashboardPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editSubject, setEditSubject] = useState("");
   const [editDeadline, setEditDeadline] = useState("");
+  const [editTime, setEditTime] = useState("");
 
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<MessageType>("");
@@ -105,6 +108,26 @@ export default function DashboardPage() {
     return cleanText(value);
   };
 
+  const formatTimeDisplay = (timeValue?: string) => {
+    if (!timeValue) return "";
+
+    const [hourString, minute] = timeValue.split(":");
+    const hour = Number(hourString);
+
+    if (Number.isNaN(hour) || !minute) return timeValue;
+
+    const suffix = hour >= 12 ? "PM" : "AM";
+    const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+
+    return `${displayHour}:${minute} ${suffix}`;
+  };
+
+  const getTaskDateTimeValue = (task: Task) => {
+    const datePart = task.deadline || "";
+    const timePart = task.time || "23:59";
+    return new Date(`${datePart}T${timePart}`).getTime();
+  };
+
   const fetchTasks = async (currentUserId: string) => {
     const { data, error } = await supabase
       .from("tasks")
@@ -120,6 +143,7 @@ export default function DashboardPage() {
           ...task,
           title: cleanTaskTitle(task.title),
           subject: formatSubjectName(task.subject),
+          time: task.time || "",
         })) || [];
 
       setTasks(cleanedTasks);
@@ -136,7 +160,7 @@ export default function DashboardPage() {
     const cleanedTitle = cleanTaskTitle(title);
     const cleanedSubject = formatSubjectName(subject);
 
-    if (!cleanedTitle || !cleanedSubject || !deadline || !userId) {
+    if (!cleanedTitle || !cleanedSubject || !deadline || !time || !userId) {
       showMessage("Please fill in all fields.", "error");
       return;
     }
@@ -147,6 +171,7 @@ export default function DashboardPage() {
         title: cleanedTitle,
         subject: cleanedSubject,
         deadline,
+        time,
         completed: false,
       },
     ]);
@@ -157,6 +182,7 @@ export default function DashboardPage() {
       setTitle("");
       setSubject("");
       setDeadline("");
+      setTime("");
       await fetchTasks(userId);
       showMessage("Task added successfully.", "success");
     }
@@ -189,6 +215,7 @@ export default function DashboardPage() {
     setEditTitle(task.title);
     setEditSubject(task.subject);
     setEditDeadline(task.deadline);
+    setEditTime(task.time || "");
     setMessage("");
     setMessageType("");
   };
@@ -202,7 +229,7 @@ export default function DashboardPage() {
     const cleanedTitle = cleanTaskTitle(editTitle);
     const cleanedSubject = formatSubjectName(editSubject);
 
-    if (!cleanedTitle || !cleanedSubject || !editDeadline) {
+    if (!cleanedTitle || !cleanedSubject || !editDeadline || !editTime) {
       showMessage("Please fill in all edit fields.", "error");
       return;
     }
@@ -213,6 +240,7 @@ export default function DashboardPage() {
         title: cleanedTitle,
         subject: cleanedSubject,
         deadline: editDeadline,
+        time: editTime,
       })
       .eq("id", editingTaskId);
 
@@ -223,6 +251,7 @@ export default function DashboardPage() {
       setEditTitle("");
       setEditSubject("");
       setEditDeadline("");
+      setEditTime("");
       await fetchTasks(userId);
       showMessage("Task updated successfully.", "success");
     }
@@ -233,6 +262,7 @@ export default function DashboardPage() {
     setEditTitle("");
     setEditSubject("");
     setEditDeadline("");
+    setEditTime("");
     setMessage("");
     setMessageType("");
   };
@@ -293,20 +323,23 @@ export default function DashboardPage() {
     closeModal();
   };
 
-  const getDueStatus = (dateString: string) => {
+  const getDueStatus = (dateString: string, timeValue?: string) => {
+    const now = new Date();
+    const taskDateTime = new Date(`${dateString}T${timeValue || "23:59"}`);
+
     const today = new Date();
-    const taskDate = new Date(dateString);
-
     today.setHours(0, 0, 0, 0);
-    taskDate.setHours(0, 0, 0, 0);
 
-    const diffMs = taskDate.getTime() - today.getTime();
+    const taskDateOnly = new Date(dateString);
+    taskDateOnly.setHours(0, 0, 0, 0);
+
+    const diffMs = taskDateOnly.getTime() - today.getTime();
     const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffDays < 0) {
+    if (taskDateTime.getTime() < now.getTime()) {
       return {
         label: "Overdue",
-        description: `overdue by ${Math.abs(diffDays)} day(s)`,
+        description: "past due",
         className: "bg-red-500/10 text-red-300",
       };
     }
@@ -314,7 +347,9 @@ export default function DashboardPage() {
     if (diffDays === 0) {
       return {
         label: "Due Today",
-        description: "due today",
+        description: timeValue
+          ? `due today at ${formatTimeDisplay(timeValue)}`
+          : "due today",
         className: "bg-red-500/10 text-red-200",
       };
     }
@@ -322,7 +357,9 @@ export default function DashboardPage() {
     if (diffDays === 1) {
       return {
         label: "Due Tomorrow",
-        description: "due tomorrow",
+        description: timeValue
+          ? `due tomorrow at ${formatTimeDisplay(timeValue)}`
+          : "due tomorrow",
         className: "bg-amber-500/10 text-amber-200",
       };
     }
@@ -330,20 +367,24 @@ export default function DashboardPage() {
     if (diffDays <= 7) {
       return {
         label: "Due Soon",
-        description: `due in ${diffDays} days`,
+        description: timeValue
+          ? `due in ${diffDays} days at ${formatTimeDisplay(timeValue)}`
+          : `due in ${diffDays} days`,
         className: "bg-yellow-500/10 text-yellow-200",
       };
     }
 
     return {
       label: "Upcoming",
-      description: `due on ${dateString}`,
+      description: timeValue
+        ? `due on ${dateString} at ${formatTimeDisplay(timeValue)}`
+        : `due on ${dateString}`,
       className: "bg-blue-500/10 text-blue-200",
     };
   };
 
-  const formatDateLabel = (dateString: string) => {
-    return getDueStatus(dateString).description;
+  const formatDateLabel = (dateString: string, timeValue?: string) => {
+    return getDueStatus(dateString, timeValue).description;
   };
 
   const handleGeneratePlan = async () => {
@@ -383,13 +424,14 @@ export default function DashboardPage() {
     }
 
     const sortedTasks = [...pendingTasks].sort((a, b) => {
-      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      return getTaskDateTimeValue(a) - getTaskDateTimeValue(b);
     });
 
     const priorities = sortedTasks.map((task, index) => {
       const prefix = index === 0 ? "Start with" : "Then work on";
       return `${prefix} "${task.title}" for ${task.subject} because it is ${formatDateLabel(
-        task.deadline
+        task.deadline,
+        task.time
       )}.`;
     });
 
@@ -409,11 +451,7 @@ export default function DashboardPage() {
     ];
 
     const hasOverdueTask = sortedTasks.some((task) => {
-      const today = new Date();
-      const taskDate = new Date(task.deadline);
-      today.setHours(0, 0, 0, 0);
-      taskDate.setHours(0, 0, 0, 0);
-      return taskDate < today;
+      return getTaskDateTimeValue(task) < new Date().getTime();
     });
 
     setTimeout(() => {
@@ -737,7 +775,7 @@ export default function DashboardPage() {
               </p>
               <h2 className="text-2xl font-bold text-white">Create a new study task</h2>
               <p className="mt-2 text-sm leading-6 text-slate-400">
-                Add a title, subject, and deadline to keep your study plan organized.
+                Add a title, subject, date, and time to keep your study plan organized.
               </p>
             </div>
 
@@ -770,12 +808,24 @@ export default function DashboardPage() {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Deadline
+                  Date
                 </label>
                 <input
                   type="date"
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-blue-400/60 focus:bg-white/10 focus:ring-2 focus:ring-blue-500/30"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-200">
+                  Time
+                </label>
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-blue-400/60 focus:bg-white/10 focus:ring-2 focus:ring-blue-500/30"
                 />
               </div>
@@ -844,7 +894,7 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-4">
                 {filteredTasks.map((task) => {
-                  const dueStatus = getDueStatus(task.deadline);
+                  const dueStatus = getDueStatus(task.deadline, task.time);
 
                   return (
                     <div
@@ -879,12 +929,24 @@ export default function DashboardPage() {
 
                           <div>
                             <label className="mb-2 block text-sm font-medium text-slate-200">
-                              Deadline
+                              Date
                             </label>
                             <input
                               type="date"
                               value={editDeadline}
                               onChange={(e) => setEditDeadline(e.target.value)}
+                              className="w-full rounded-2xl border border-white/10 bg-slate-800/80 px-4 py-3 text-white outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/30"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-slate-200">
+                              Time
+                            </label>
+                            <input
+                              type="time"
+                              value={editTime}
+                              onChange={(e) => setEditTime(e.target.value)}
                               className="w-full rounded-2xl border border-white/10 bg-slate-800/80 px-4 py-3 text-white outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/30"
                             />
                           </div>
@@ -941,6 +1003,7 @@ export default function DashboardPage() {
                             </p>
                             <p className="mt-1 text-sm text-slate-400">
                               Deadline: {task.deadline}
+                              {task.time ? ` at ${formatTimeDisplay(task.time)}` : ""}
                               {!task.completed && (
                                 <span className="ml-2 text-slate-300">
                                   ({dueStatus.description})
